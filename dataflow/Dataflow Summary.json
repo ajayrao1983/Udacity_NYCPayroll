@@ -1,0 +1,178 @@
+{
+	"name": "Dataflow Summary",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "dataset_file_nycpayroll2020",
+						"type": "DatasetReference"
+					},
+					"name": "data2020"
+				},
+				{
+					"dataset": {
+						"referenceName": "dataset_file_nycpayroll2021",
+						"type": "DatasetReference"
+					},
+					"name": "data2021"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "dataset_db_nyc_payroll_summary",
+						"type": "DatasetReference"
+					},
+					"name": "sinksqldb",
+					"description": "Store in Azure SQL DB"
+				},
+				{
+					"dataset": {
+						"referenceName": "dataset_file_staging",
+						"type": "DatasetReference"
+					},
+					"name": "sinkadls"
+				}
+			],
+			"transformations": [
+				{
+					"name": "append",
+					"description": "Append 2020 and 2021 data"
+				},
+				{
+					"name": "renamecolumn",
+					"description": "Renaming AgencyID as AgencyCode to match the column name in 2021 data"
+				},
+				{
+					"name": "filterdata",
+					"description": "Filter data where fiscal year is 2020 or 2021"
+				},
+				{
+					"name": "totalpaid",
+					"description": "Create a new column 'TotalPaid' by summing values in 'RegularGrossPaid', 'TotalOTPaid' and 'TotalOtherPay'"
+				},
+				{
+					"name": "groupby",
+					"description": "Group TotalPaid by AgencyName"
+				},
+				{
+					"name": "changedatatype",
+					"description": "Change data type to float for 'RegularGrossPaid', 'TotalOTPaid' and 'TotalOtherPay'"
+				}
+			],
+			"scriptLines": [
+				"parameters{",
+				"     dataflow_param_fiscalyear as integer (2020)",
+				"}",
+				"source(output(",
+				"          FiscalYear as string,",
+				"          PayrollNumber as string,",
+				"          AgencyID as string,",
+				"          AgencyName as string,",
+				"          EmployeeID as string,",
+				"          LastName as string,",
+				"          FirstName as string,",
+				"          AgencyStartDate as string,",
+				"          WorkLocationBorough as string,",
+				"          TitleCode as string,",
+				"          TitleDescription as string,",
+				"          LeaveStatusasofJune30 as string,",
+				"          BaseSalary as string,",
+				"          PayBasis as string,",
+				"          RegularHours as string,",
+				"          RegularGrossPaid as string,",
+				"          OTHours as string,",
+				"          TotalOTPaid as string,",
+				"          TotalOtherPay as string",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     ignoreNoFilesFound: false) ~> data2020",
+				"source(output(",
+				"          FiscalYear as string,",
+				"          PayrollNumber as string,",
+				"          AgencyCode as string,",
+				"          AgencyName as string,",
+				"          EmployeeID as string,",
+				"          LastName as string,",
+				"          FirstName as string,",
+				"          AgencyStartDate as string,",
+				"          WorkLocationBorough as string,",
+				"          TitleCode as string,",
+				"          TitleDescription as string,",
+				"          LeaveStatusasofJune30 as string,",
+				"          BaseSalary as string,",
+				"          PayBasis as string,",
+				"          RegularHours as string,",
+				"          RegularGrossPaid as string,",
+				"          OTHours as string,",
+				"          TotalOTPaid as string,",
+				"          TotalOtherPay as string",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     ignoreNoFilesFound: false) ~> data2021",
+				"renamecolumn, data2021 union(byName: true)~> append",
+				"data2020 select(mapColumn(",
+				"          FiscalYear,",
+				"          PayrollNumber,",
+				"          AgencyCode = AgencyID,",
+				"          AgencyName,",
+				"          EmployeeID,",
+				"          LastName,",
+				"          FirstName,",
+				"          AgencyStartDate,",
+				"          WorkLocationBorough,",
+				"          TitleCode,",
+				"          TitleDescription,",
+				"          LeaveStatusasofJune30,",
+				"          BaseSalary,",
+				"          PayBasis,",
+				"          RegularHours,",
+				"          RegularGrossPaid,",
+				"          OTHours,",
+				"          TotalOTPaid,",
+				"          TotalOtherPay",
+				"     ),",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true) ~> renamecolumn",
+				"append filter(toInteger(FiscalYear)>=$dataflow_param_fiscalyear) ~> filterdata",
+				"changedatatype derive(TotalPaid = RegularGrossPaid+TotalOTPaid+TotalOtherPay) ~> totalpaid",
+				"totalpaid aggregate(groupBy(AgencyName,",
+				"          FiscalYear),",
+				"     TotalPaid = sum(TotalPaid)) ~> groupby",
+				"filterdata cast(output(",
+				"          RegularGrossPaid as float,",
+				"          TotalOTPaid as float,",
+				"          TotalOtherPay as float",
+				"     ),",
+				"     errors: true) ~> changedatatype",
+				"groupby sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     input(",
+				"          FiscalYear as integer,",
+				"          AgencyName as string,",
+				"          TotalPaid as double",
+				"     ),",
+				"     deletable:false,",
+				"     insertable:true,",
+				"     updateable:false,",
+				"     upsertable:false,",
+				"     truncate:true,",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     errorHandlingOption: 'stopOnFirstError') ~> sinksqldb",
+				"groupby sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     umask: 0022,",
+				"     preCommands: [],",
+				"     postCommands: [],",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true) ~> sinkadls"
+			]
+		}
+	}
+}

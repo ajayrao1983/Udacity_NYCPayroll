@@ -1,0 +1,29 @@
+{
+	"name": "dataset_db_nyc_payroll_agency",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "AzureSqlDatabase1",
+			"type": "LinkedServiceReference"
+		},
+		"folder": {
+			"name": "SQL DB"
+		},
+		"annotations": [],
+		"type": "AzureSqlTable",
+		"schema": [
+			{
+				"name": "AgencyID",
+				"type": "varchar"
+			},
+			{
+				"name": "AgencyName",
+				"type": "varchar"
+			}
+		],
+		"typeProperties": {
+			"schema": "dbo",
+			"table": "NYC_Payroll_AGENCY_MD"
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}
